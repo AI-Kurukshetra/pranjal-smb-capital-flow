@@ -2,6 +2,12 @@
   "name": "smb-capital-flow",
   "version": "0.1.0",
   "private": true,
+  "overrides": {
+    "next": "15.5.9",
+    "react-server-dom-webpack": "19.0.1",
+    "react-server-dom-parcel": "19.0.1",
+    "react-server-dom-turbopack": "19.0.1"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:all": "node scripts/kill-and-start.mjs",
@@ -15,9 +21,9 @@
     "@supabase/supabase-js": "^2.58.0",
     "framer-motion": "^12.36.0",
     "groq-sdk": "^0.26.0",
-    "next": "15.3.8",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "next": "15.5.9",
+    "react": "19.0.1",
+    "react-dom": "19.0.1",
     "stripe": "^20.4.1"
   },
   "devDependencies": {
@@ -28,7 +34,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.2.1",
     "eslint": "^9",
-    "eslint-config-next": "15.3.8",
+    "eslint-config-next": "15.5.9",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "5.9.3"
