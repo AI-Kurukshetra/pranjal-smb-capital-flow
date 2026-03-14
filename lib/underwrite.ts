@@ -1,6 +1,8 @@
 import Groq from "groq-sdk"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { calculateMonthlyPayment } from "@/lib/utils/loan"
+import { logAuditEvent } from "@/lib/compliance/audit"
+import { validateDocumentRelevance } from "@/lib/documents/validate"
 
 type UnderwriteResult = {
   status: string
@@ -24,6 +26,7 @@ type RuleScoreInput = {
   requestedAmount: number
   termMonths: number
   documentsCount: number
+  relevantDocumentsCount?: number
   loanPurpose: string
 }
 
@@ -31,7 +34,8 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-function buildRuleDecision(input: RuleScoreInput) {
+export function buildRuleDecision(input: RuleScoreInput) {
+  const relevantCount = input.relevantDocumentsCount ?? input.documentsCount
   const {
     annualRevenue,
     yearsInBusiness,
@@ -85,14 +89,25 @@ function buildRuleDecision(input: RuleScoreInput) {
     hardFailReasons.push("Business history is too short")
   }
 
-  if (documentsCount >= 3) {
+  if (documentsCount > 0 && relevantCount === 0) {
+    hardFailReasons.push("Submitted documents do not contain relevant financial information")
+    score -= 35
+    score = Math.min(score, 45)
+  } else if (documentsCount > relevantCount && relevantCount > 0) {
+    hardFailReasons.push("Some uploaded documents are not valid financial documents")
+    score -= 15
+  }
+
+  if (relevantCount >= 3) {
     score += 10
-  } else if (documentsCount === 2) {
+  } else if (relevantCount === 2) {
     score += 6
-  } else if (documentsCount === 1) {
+  } else if (relevantCount === 1) {
     score += 2
-  } else {
+  } else if (documentsCount === 0) {
     score -= 10
+  } else {
+    score -= 15
   }
 
   if (documentsCount === 0 && requestedAmount > 50000) {
@@ -125,6 +140,7 @@ function buildRuleDecision(input: RuleScoreInput) {
       term_months: termMonths,
       years_in_business: yearsInBusiness,
       documents_count: documentsCount,
+      relevant_documents_count: relevantCount,
       revenue_coverage_ratio: Number.isFinite(revenueCoverageRatio)
         ? Number(revenueCoverageRatio.toFixed(3))
         : -1
@@ -153,7 +169,7 @@ async function buildModelReason(input: RuleScoreInput, score: number, recommenda
             `Requested amount: ${input.requestedAmount}`,
             `Term months: ${input.termMonths}`,
             `Years in business: ${input.yearsInBusiness}`,
-            `Documents count: ${input.documentsCount}`,
+            `Documents count: ${input.documentsCount} (relevant: ${input.relevantDocumentsCount ?? input.documentsCount})`,
             `Loan purpose: ${input.loanPurpose || "Not provided"}`
           ].join("\n")
         }
@@ -205,8 +221,21 @@ export async function runUnderwriting(applicationId: string): Promise<Underwrite
 
   const { data: documents } = await supabase
     .from("documents")
-    .select("id")
+    .select("id, file_path")
     .eq("application_id", applicationId)
+
+  let relevantDocumentsCount = 0
+  if (documents && documents.length > 0) {
+    for (const doc of documents) {
+      const { data: fileData, error } = await supabase.storage
+        .from("documents")
+        .download(doc.file_path)
+      if (error || !fileData) continue
+      const buffer = await fileData.arrayBuffer()
+      const { is_relevant } = await validateDocumentRelevance(buffer, doc.file_path)
+      if (is_relevant) relevantDocumentsCount++
+    }
+  }
 
   const scoreInput: RuleScoreInput = {
     annualRevenue: Number(business.annual_revenue || 0),
@@ -214,6 +243,7 @@ export async function runUnderwriting(applicationId: string): Promise<Underwrite
     requestedAmount: Number(application.requested_amount || 0),
     termMonths: Number(application.term_months || 12),
     documentsCount: documents?.length || 0,
+    relevantDocumentsCount,
     loanPurpose: application.loan_purpose || ""
   }
 
@@ -256,6 +286,19 @@ export async function runUnderwriting(applicationId: string): Promise<Underwrite
     throw new Error(updateError.message)
   }
 
+  await logAuditEvent({
+    actorUserId: business.profile_id,
+    eventType: "underwriting.decision.made",
+    entityType: "application",
+    entityId: applicationId,
+    metadata: {
+      status,
+      recommendation: decision.recommendation,
+      score: decision.score,
+      hardFailReasons: decision.hard_fail_reasons ?? []
+    }
+  })
+
   if (ruleDecision.recommendation !== "approve") {
     return {
       status,
@@ -275,6 +318,17 @@ export async function runUnderwriting(applicationId: string): Promise<Underwrite
     .maybeSingle()
 
   if (existingLoan) {
+    await logAuditEvent({
+      actorUserId: business.profile_id,
+      eventType: "loan.reused.existing",
+      entityType: "loan",
+      entityId: existingLoan.id,
+      metadata: {
+        applicationId,
+        status
+      }
+    })
+
     return {
       status,
       credit_decision: decision,
@@ -303,6 +357,20 @@ export async function runUnderwriting(applicationId: string): Promise<Underwrite
   if (loanError) {
     throw new Error(loanError.message)
   }
+
+  await logAuditEvent({
+    actorUserId: business.profile_id,
+    eventType: "loan.created",
+    entityType: "loan",
+    entityId: loan.id,
+    metadata: {
+      applicationId,
+      principal,
+      interestRate,
+      termMonths: term,
+      monthlyPayment
+    }
+  })
 
   return {
     status,

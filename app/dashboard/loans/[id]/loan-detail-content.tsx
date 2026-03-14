@@ -2,10 +2,12 @@
 
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { formatCurrency } from "@/lib/utils/loan"
+import { formatCurrency, formatProductType } from "@/lib/utils/loan"
 import { MakePaymentButton } from "./make-payment-button"
 
 type ScheduleRow = { month: number; payment: number; principal: number; interest: number; balance: number }
+
+type PaymentRecord = { id: string; amount: number; paid_at: string | null; status: string }
 
 type Props = {
   loan: {
@@ -16,12 +18,14 @@ type Props = {
     term_months: number
     monthly_payment: number
     status: string
+    product_type?: string | null
   }
   schedule: ScheduleRow[]
+  payments?: PaymentRecord[]
   paymentStatus?: "success" | "cancelled"
 }
 
-export function LoanDetailContent({ loan, schedule, paymentStatus }: Props) {
+export function LoanDetailContent({ loan, schedule, payments = [], paymentStatus }: Props) {
   return (
     <div className="space-y-8">
       <motion.div
@@ -43,8 +47,12 @@ export function LoanDetailContent({ loan, schedule, paymentStatus }: Props) {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="grid gap-4 rounded-2xl border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-6 shadow-colored md:grid-cols-6"
+        className="grid gap-4 rounded-2xl border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-6 shadow-colored md:grid-cols-7"
       >
+        <article>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Product</p>
+          <p className="mt-2 font-semibold text-slate-900">{formatProductType(loan.product_type)}</p>
+        </article>
         <article>
           <p className="text-xs uppercase tracking-wide text-slate-500">Principal</p>
           <p className="mt-2 font-semibold text-slate-900">{formatCurrency(loan.principal)}</p>
@@ -100,6 +108,44 @@ export function LoanDetailContent({ loan, schedule, paymentStatus }: Props) {
       ) : null}
 
       <MakePaymentButton loanId={loan.id} />
+
+      {payments.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-colored"
+        >
+          <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-teal-50/50 px-6 py-4">
+            <h2 className="font-semibold text-slate-900">Payment History</h2>
+            <p className="mt-1 text-sm text-slate-600">Transaction history for this loan</p>
+          </div>
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80">
+                <th className="px-6 py-4 font-semibold text-slate-700">Date</th>
+                <th className="px-6 py-4 font-semibold text-slate-700">Amount</th>
+                <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => (
+                <tr key={p.id} className="border-t border-slate-100 hover:bg-teal-50/30">
+                  <td className="px-6 py-3">
+                    {p.paid_at ? new Date(p.paid_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                  </td>
+                  <td className="px-6 py-3 font-medium text-slate-900">{formatCurrency(p.amount)}</td>
+                  <td className="px-6 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${p.status === "succeeded" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </motion.section>
+      )}
 
       <motion.section
         initial={{ opacity: 0, y: 24 }}

@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import type { Application, Business, Loan } from "@/lib/types"
-import { formatCurrency, statusClasses } from "@/lib/utils/loan"
+import { formatCurrency, formatProductType, statusClasses } from "@/lib/utils/loan"
 
 function getDecision(application: Application) {
   const decision = application.credit_decision
@@ -19,15 +20,45 @@ const statCards = [
 ]
 
 type Props = {
-  stats: number[]
   applications: Application[]
   businesses: Business[]
   loans: Loan[]
 }
 
-export function DashboardContent({ stats, applications, businesses, loans }: Props) {
+export function DashboardContent({ applications, businesses, loans }: Props) {
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
   const businessMap = new Map(businesses.map((b) => [b.id, b]))
-  const loanByApplicationId = new Map(loans.map((l) => [l.application_id, l]))
+  const displayedApplications = applications.filter((a) => !deletedIds.has(a.id))
+  const displayedLoans = loans.filter((l) => !deletedIds.has(l.application_id))
+  const loanByApplicationId = new Map(displayedLoans.map((l) => [l.application_id, l]))
+  const displayStats = [
+    displayedApplications.length,
+    displayedApplications.filter((a) => a.status === "approved").length,
+    displayedLoans.filter((l) => l.status === "active").length
+  ]
+
+  async function handleDelete(appId: string, hasLoan: boolean, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const msg = hasLoan
+      ? "Delete this application and its loan? This cannot be undone."
+      : "Delete this application? This cannot be undone."
+    if (!confirm(msg)) return
+    setDeletingId(appId)
+    try {
+      const res = await fetch(`/api/applications/${appId}/delete`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to delete (${res.status})`)
+      }
+      setDeletedIds((prev) => new Set(prev).add(appId))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete")
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -54,12 +85,12 @@ export function DashboardContent({ stats, applications, businesses, loans }: Pro
               {card.icon}
             </motion.div>
             <p className="mt-4 text-sm font-medium text-slate-600">{card.label}</p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">{stats[i]}</p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">{displayStats[i]}</p>
           </motion.article>
         ))}
       </section>
 
-      {applications.length === 0 ? (
+      {displayedApplications.length === 0 ? (
         <motion.section
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -98,14 +129,16 @@ export function DashboardContent({ stats, applications, businesses, loans }: Pro
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80">
                 <th className="px-6 py-4 font-semibold text-slate-700">Business</th>
+                <th className="px-6 py-4 font-semibold text-slate-700">Product</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Amount</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Decision</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Loan</th>
+                <th className="px-6 py-4 font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {applications.map((app, i) => {
+              {displayedApplications.map((app, i) => {
                 const loan = loanByApplicationId.get(app.id)
                 return (
                   <motion.tr
@@ -116,6 +149,7 @@ export function DashboardContent({ stats, applications, businesses, loans }: Pro
                     className="border-b border-slate-100 transition hover:bg-teal-50/30"
                   >
                     <td className="px-6 py-4 font-medium text-slate-900">{businessMap.get(app.business_id)?.name ?? "-"}</td>
+                    <td className="px-6 py-4 text-slate-600">{formatProductType(app.product_type)}</td>
                     <td className="px-6 py-4 text-slate-700">{formatCurrency(app.requested_amount)}</td>
                     <td className="px-6 py-4">
                       <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusClasses(app.status)}`}>
@@ -134,6 +168,16 @@ export function DashboardContent({ stats, applications, businesses, loans }: Pro
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(app.id, !!loan, e)}
+                        disabled={deletingId === app.id}
+                        className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {deletingId === app.id ? "Deleting..." : "Delete"}
+                      </button>
                     </td>
                   </motion.tr>
                 )

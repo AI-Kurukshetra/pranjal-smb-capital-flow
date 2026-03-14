@@ -30,7 +30,7 @@ export default async function LoanDetailPage({
 
   const { data: application } = await supabase
     .from("applications")
-    .select("id, business_id")
+    .select("id, business_id, product_type")
     .eq("id", loan.application_id)
     .single()
 
@@ -50,6 +50,12 @@ export default async function LoanDetailPage({
 
   const schedule = createAmortizationSchedule(loan.principal, loan.interest_rate, loan.term_months)
 
+  const { data: payments } = await supabase
+    .from("loan_payments")
+    .select("id, amount, paid_at, status")
+    .eq("loan_id", id)
+    .order("paid_at", { ascending: false })
+
   return (
     <LoanDetailContent
       loan={{
@@ -59,9 +65,11 @@ export default async function LoanDetailPage({
         interest_rate: loan.interest_rate,
         term_months: loan.term_months,
         monthly_payment: loan.monthly_payment,
-        status: loan.status
+        status: loan.status,
+        product_type: application?.product_type ?? null
       }}
       schedule={schedule}
+      payments={payments ?? []}
       paymentStatus={payment === "success" || payment === "cancelled" ? payment : undefined}
     />
   )

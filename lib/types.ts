@@ -14,6 +14,7 @@ export type Application = {
   requested_amount: number
   loan_purpose: string | null
   term_months: number | null
+  product_type?: string | null
   status: string
   credit_decision: {
     score?: number

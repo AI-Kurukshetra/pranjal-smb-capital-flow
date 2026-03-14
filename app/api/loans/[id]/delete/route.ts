@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { runUnderwriting } from "@/lib/underwrite"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { logAuditEvent } from "@/lib/compliance/audit"
 
-export async function POST(
-  request: Request,
+export async function DELETE(
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -14,15 +15,24 @@ export async function POST(
     const {
       data: { user }
     } = await supabase.auth.getUser()
-
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { data: loan, error: loanError } = await supabase
+      .from("loans")
+      .select("id, application_id")
+      .eq("id", id)
+      .single()
+
+    if (loanError || !loan) {
+      return NextResponse.json({ error: "Loan not found" }, { status: 404 })
+    }
+
     const { data: application } = await supabase
       .from("applications")
-      .select("id, business_id")
-      .eq("id", id)
+      .select("business_id")
+      .eq("id", loan.application_id)
       .single()
 
     if (!application) {
@@ -31,7 +41,7 @@ export async function POST(
 
     const { data: business } = await supabase
       .from("businesses")
-      .select("id, profile_id")
+      .select("profile_id")
       .eq("id", application.business_id)
       .single()
 
@@ -39,36 +49,28 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const admin = createAdminClient()
+    const { error: deleteError } = await admin
+      .from("loans")
+      .delete()
+      .eq("id", id)
+
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    }
+
+    revalidatePath("/dashboard")
     await logAuditEvent({
       actorUserId: user.id,
-      eventType: "application.submission.requested",
-      entityType: "application",
+      eventType: "loan.deleted",
+      entityType: "loan",
       entityId: id,
-      metadata: {
-        businessId: application.business_id
-      },
-      request
+      request: _request
     })
-
-    const result = await runUnderwriting(id)
-
-    await logAuditEvent({
-      actorUserId: user.id,
-      eventType: "application.submission.completed",
-      entityType: "application",
-      entityId: id,
-      metadata: {
-        status: result.status,
-        recommendation: result.credit_decision.recommendation,
-        score: result.credit_decision.score
-      },
-      request
-    })
-
-    return NextResponse.json(result)
-  } catch (error) {
+    return NextResponse.json({ success: true })
+  } catch (err) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to submit application" },
+      { error: err instanceof Error ? err.message : "Failed to delete loan" },
       { status: 500 }
     )
   }

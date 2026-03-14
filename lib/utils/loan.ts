@@ -57,6 +57,16 @@ export function formatCurrency(value: number) {
   }).format(value || 0)
 }
 
+export function formatProductType(value?: string | null): string {
+  const lookup: Record<string, string> = {
+    term_loan: "Term Loan",
+    line_of_credit: "Line of Credit",
+    merchant_cash_advance: "Merchant Cash Advance",
+    equipment_financing: "Equipment Financing"
+  }
+  return (value && lookup[value]) || value || "Term Loan"
+}
+
 export function statusClasses(status: string) {
   const lookup: Record<string, string> = {
     draft: "bg-slate-100 text-slate-700",

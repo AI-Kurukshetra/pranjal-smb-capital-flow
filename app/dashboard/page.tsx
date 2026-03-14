@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import type { Application, Business, Loan } from "@/lib/types"
 import { DashboardContent } from "./dashboard-content"
 
+export const dynamic = "force-dynamic"
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const {
@@ -46,13 +48,8 @@ export default async function DashboardPage() {
     }
   }
 
-  const approvedCount = applications.filter((a) => a.status === "approved").length
-  const activeLoans = loans.filter((l) => l.status === "active").length
-  const stats = [applications.length, approvedCount, activeLoans]
-
   return (
     <DashboardContent
-      stats={stats}
       applications={applications}
       businesses={businessRows}
       loans={loans}

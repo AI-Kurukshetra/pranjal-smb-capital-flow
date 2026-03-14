@@ -9,6 +9,7 @@ export default function RegisterPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const [fullName, setFullName] = useState("")
+  const [role, setRole] = useState("borrower")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -24,7 +25,8 @@ export default function RegisterPage() {
       password,
       options: {
         data: {
-          full_name: fullName
+          full_name: fullName,
+          role
         }
       }
     })
@@ -69,6 +71,17 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-700">Role</span>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+              >
+                <option value="borrower">Borrower</option>
+                <option value="compliance">Compliance</option>
+              </select>
             </label>
             <label className="block">
               <span className="mb-2 block text-sm font-medium text-slate-700">Password</span>

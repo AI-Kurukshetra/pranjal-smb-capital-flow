@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getStripeServerClient } from "@/lib/stripe/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logAuditEvent } from "@/lib/compliance/audit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -104,6 +105,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: insertError.message }, { status: 500 })
       }
 
+      await logAuditEvent({
+        eventType: "payment.recorded",
+        entityType: "payment",
+        entityId: paymentIntentId,
+        metadata: {
+          loanId,
+          amountPaid,
+          currency: session.currency || "usd",
+          checkoutSessionId: session.id
+        },
+        request
+      })
+
       const { data: loan } = await admin
         .from("loans")
         .select("id, principal, outstanding_principal")
@@ -128,6 +142,19 @@ export async function POST(request: Request) {
           console.error("[Stripe Webhook] Loan update failed:", updateError)
           return NextResponse.json({ error: updateError.message }, { status: 500 })
         }
+
+        await logAuditEvent({
+          eventType: "loan.payment_applied",
+          entityType: "loan",
+          entityId: loanId,
+          metadata: {
+            amountPaid,
+            remaining,
+            nextStatus
+          },
+          request
+        })
+
         console.log("[Stripe Webhook] Loan updated", { loanId, remaining, nextStatus })
       } else {
         log("Loan not found for id", { loanId })

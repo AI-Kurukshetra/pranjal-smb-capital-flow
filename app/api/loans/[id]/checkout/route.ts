@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getStripeServerClient } from "@/lib/stripe/server"
+import { logAuditEvent } from "@/lib/compliance/audit"
 
 type OwnerLoanRow = {
   id: string
@@ -113,6 +114,19 @@ export async function POST(
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
+
+    await logAuditEvent({
+      actorUserId: user.id,
+      eventType: "payment.checkout.created",
+      entityType: "loan",
+      entityId: ownerLoan.id,
+      metadata: {
+        checkoutSessionId: session.id,
+        amountInCents,
+        customerId
+      },
+      request: _request
+    })
 
     return NextResponse.json({ url: session.url })
   } catch (error) {

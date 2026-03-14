@@ -41,9 +41,22 @@ export default function ApplyPage() {
   const [requestedAmount, setRequestedAmount] = useState("25000")
   const [loanPurpose, setLoanPurpose] = useState("")
   const [termMonths, setTermMonths] = useState("12")
+  const [productType, setProductType] = useState("term_loan")
 
   const [kycConfirmed, setKycConfirmed] = useState(false)
   const [decision, setDecision] = useState<DecisionResponse | null>(null)
+  const [selectedDocType, setSelectedDocType] = useState<string>("bank_statement")
+  const [eligibilityResult, setEligibilityResult] = useState<{ score: number; recommendation: string; reason: string; tips: string[] } | null>(null)
+  const [eligibilityLoading, setEligibilityLoading] = useState(false)
+
+  const docTypes = [
+    { value: "bank_statement", label: "Bank Statement" },
+    { value: "tax_return", label: "Tax Return" },
+    { value: "financial_statement", label: "Financial Statement" },
+    { value: "business_license", label: "Business License" },
+    { value: "contract", label: "Contract / Agreement" },
+    { value: "other", label: "Other" }
+  ]
 
   async function loadUserId() {
     const {
@@ -137,6 +150,7 @@ export default function ApplyPage() {
         requested_amount: amount,
         loan_purpose: loanPurpose,
         term_months: Number(termMonths),
+        product_type: productType,
         status: "draft"
       }
 
@@ -190,7 +204,7 @@ export default function ApplyPage() {
           application_id: applicationId,
           file_name: file.name,
           file_path: filePath,
-          doc_type: "other"
+          doc_type: selectedDocType
         })
         .select("*")
         .single()
@@ -227,6 +241,32 @@ export default function ApplyPage() {
       setError(deleteStepError instanceof Error ? deleteStepError.message : "Failed to remove file")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function checkEligibility() {
+    setEligibilityLoading(true)
+    setEligibilityResult(null)
+    try {
+      const res = await fetch("/api/eligibility-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: applicationId ?? undefined,
+          annualRevenue: Number(annualRevenue || 0),
+          yearsInBusiness: Number(yearsInBusiness || 0),
+          requestedAmount: Number(requestedAmount || 0),
+          termMonths: Number(termMonths || 12),
+          loanPurpose: loanPurpose || ""
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Check failed")
+      setEligibilityResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Eligibility check failed")
+    } finally {
+      setEligibilityLoading(false)
     }
   }
 
@@ -379,6 +419,21 @@ export default function ApplyPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <label>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Loan type</span>
+              <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={productType} onChange={(e) => setProductType(e.target.value)}>
+                <option value="term_loan">Term Loan</option>
+                <option value="line_of_credit">Line of Credit</option>
+                <option value="merchant_cash_advance">Merchant Cash Advance</option>
+                <option value="equipment_financing">Equipment Financing</option>
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">
+                {productType === "term_loan" && "Fixed amount, fixed monthly payments"}
+                {productType === "line_of_credit" && "Revolving credit, draw as needed (coming soon)"}
+                {productType === "merchant_cash_advance" && "Repay via % of daily sales (coming soon)"}
+                {productType === "equipment_financing" && "Finance equipment purchase (coming soon)"}
+              </span>
+            </label>
+            <label>
               <span className="mb-1 block text-sm font-medium text-slate-700">Requested amount</span>
               <input
                 type="number"
@@ -427,25 +482,49 @@ export default function ApplyPage() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold">3</span>
             <h2 className="text-xl font-semibold text-slate-900">Documents</h2>
           </div>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Upload document (PDF or image)</span>
-            <input
-              type="file"
-              accept="application/pdf,image/*"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) {
-                  void handleUpload(file)
-                }
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
+          <p className="text-sm text-slate-600">Upload business documents: tax returns, bank statements, financial statements, etc.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Document type</span>
+              <select
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={selectedDocType}
+                onChange={(e) => setSelectedDocType(e.target.value)}
+              >
+                {docTypes.map((dt) => (
+                  <option key={dt.value} value={dt.value}>
+                    {dt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Upload (PDF or image)</span>
+              <input
+                type="file"
+                accept="application/pdf,image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) {
+                    void handleUpload(file)
+                  }
+                }}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
 
           <ul className="space-y-2">
             {documents.map((document) => (
-              <li key={document.id} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
-                <span>{document.file_name}</span>
+              <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm">
+                <span>
+                  {document.file_name}
+                  {document.doc_type && document.doc_type !== "other" ? (
+                    <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800">
+                      {docTypes.find((d) => d.value === document.doc_type)?.label ?? document.doc_type}
+                    </span>
+                  ) : null}
+                </span>
                 <button
                   type="button"
                   onClick={() => void removeDocument(document)}
@@ -458,6 +537,36 @@ export default function ApplyPage() {
             {documents.length === 0 ? <li className="text-sm text-slate-500">No documents uploaded yet.</li> : null}
           </ul>
 
+          <div className="rounded-lg border-2 border-dashed border-teal-200 bg-teal-50/50 p-4">
+            <p className="text-sm font-medium text-slate-700">Eligibility check</p>
+            <p className="mt-1 text-xs text-slate-600">
+              {documents.length === 0 ? "Upload at least one document first." : "Check approval likelihood before submitting."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void checkEligibility()}
+                disabled={eligibilityLoading || documents.length === 0}
+                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {eligibilityLoading ? "Checking..." : "Check eligibility"}
+              </button>
+              {eligibilityResult && (
+                <div className="rounded-md bg-white px-4 py-2 text-sm shadow-sm">
+                  <span className="font-medium">{eligibilityResult.recommendation === "approve" ? "Likely approved" : "Likely rejected"}</span>
+                  <span className="text-slate-600"> (Score: {eligibilityResult.score})</span>
+                  {eligibilityResult.tips.length > 0 && (
+                    <ul className="mt-1 list-disc pl-4 text-xs text-amber-700">
+                      {eligibilityResult.tips.map((t, i) => (
+                        <li key={i}>{t}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <label className="flex items-start gap-2 rounded-md border border-slate-300 p-3 text-sm text-slate-700">
             <input type="checkbox" checked={kycConfirmed} onChange={(e) => setKycConfirmed(e.target.checked)} className="mt-1" />
             <span>I confirm the business information provided is accurate.</span>
@@ -469,12 +578,12 @@ export default function ApplyPage() {
             </button>
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || documents.length === 0}
               onClick={() => void handleSubmitApplication()}
-              className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
-              {loading ? "Underwriting..." : "Submit Application"}
+              {loading ? "Underwriting..." : documents.length === 0 ? "Upload documents to submit" : "Submit Application"}
             </button>
           </div>
         </section>
