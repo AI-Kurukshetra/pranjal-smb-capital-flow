@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ChatWidget } from "./chat-widget"
 
 const faqs = [
   {
@@ -11,7 +10,7 @@ const faqs = [
   },
   {
     q: "What documents do I need?",
-    a: "Upload bank statements, tax returns, financial statements, or business license. PDF or image formats are accepted."
+    a: "Upload bank statements, tax returns, financial statements, or business license. Image formats (JPG, PNG, GIF, WebP) are accepted. PDF support coming soon."
   },
   {
     q: "What loan amounts and terms are available?",
@@ -127,8 +126,6 @@ export default function SupportPage() {
           </form>
         )}
       </section>
-
-      <ChatWidget />
     </div>
   )
 }

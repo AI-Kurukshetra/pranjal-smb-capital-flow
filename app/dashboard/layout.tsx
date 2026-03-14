@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { ChatWidget } from "@/app/dashboard/support/chat-widget"
 
 type NavItem = {
   href: string
@@ -98,6 +99,7 @@ export default async function DashboardLayout({
           <main className="min-w-0 flex-1">{children}</main>
         </div>
 
+        <ChatWidget />
         <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-slate-200 bg-white/95 backdrop-blur-md lg:hidden">
           {navItems.map((item) => (
             <Link

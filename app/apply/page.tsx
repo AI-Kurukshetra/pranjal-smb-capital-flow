@@ -181,9 +181,15 @@ export default function ApplyPage() {
     }
   }
 
+  const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
+
   async function handleUpload(file: File) {
     if (!applicationId) {
       setError("Save loan details before uploading documents.")
+      return
+    }
+    if (!IMAGE_TYPES.includes(file.type)) {
+      setError("Only image files are accepted (JPG, PNG, GIF, WebP). PDF support coming soon.")
       return
     }
 
@@ -499,10 +505,10 @@ export default function ApplyPage() {
               </select>
             </label>
             <label>
-              <span className="mb-1 block text-sm font-medium text-slate-700">Upload (PDF or image)</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Upload (image only: JPG, PNG, GIF, WebP)</span>
               <input
                 type="file"
-                accept="application/pdf,image/*"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) {
@@ -578,12 +584,27 @@ export default function ApplyPage() {
             </button>
             <button
               type="button"
-              disabled={loading || documents.length === 0}
+              disabled={
+                loading ||
+                documents.length === 0 ||
+                !kycConfirmed ||
+                eligibilityResult?.recommendation !== "approve"
+              }
               onClick={() => void handleSubmitApplication()}
               className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
-              {loading ? "Underwriting..." : documents.length === 0 ? "Upload documents to submit" : "Submit Application"}
+              {loading
+                ? "Underwriting..."
+                : documents.length === 0
+                  ? "Upload documents to submit"
+                  : !kycConfirmed
+                    ? "Confirm KYC to submit"
+                    : !eligibilityResult
+                      ? "Check eligibility first"
+                      : eligibilityResult.recommendation !== "approve"
+                        ? "Eligibility must be approved to submit"
+                        : "Submit Application"}
             </button>
           </div>
         </section>

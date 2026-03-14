@@ -42,33 +42,6 @@ export async function validateDocumentRelevance(
       max_tokens: 80
     })
     textForAI = completion.choices[0]?.message?.content?.trim() || "{}"
-  } else if (ext === "pdf") {
-    const { PDFParse } = await import("pdf-parse")
-    const parser = new PDFParse({ data: new Uint8Array(fileData) })
-    try {
-      const result = await parser.getText()
-      const text = result?.text?.slice(0, 3000) || ""
-      await parser.destroy()
-      if (!text.trim()) {
-        return { is_relevant: false }
-      }
-      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
-      const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "user",
-            content: `${RELEVANCE_PROMPT}\n\nDocument text (excerpt):\n${text}`
-          }
-        ],
-        temperature: 0,
-        max_tokens: 80
-      })
-      textForAI = completion.choices[0]?.message?.content?.trim() || "{}"
-    } catch {
-      await parser.destroy()
-      return { is_relevant: false }
-    }
   } else {
     return { is_relevant: false }
   }
