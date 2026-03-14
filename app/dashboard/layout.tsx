@@ -9,10 +9,10 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient()
   const {
-    data: { session }
-  } = await supabase.auth.getSession()
+    data: { user }
+  } = await supabase.auth.getUser()
 
-  if (!session) {
+  if (!user) {
     redirect("/login")
   }
 
@@ -47,7 +47,7 @@ export default async function DashboardLayout({
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-600">
-              Welcome, {session.user?.user_metadata?.full_name || "User"}
+              Welcome, {user?.user_metadata?.full_name || "User"}
             </span>
             <form action={logout}>
               <button

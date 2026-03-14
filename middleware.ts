@@ -6,5 +6,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+  // Skip middleware for /api/* (fixes Stripe webhook 405) and static assets
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
 }
